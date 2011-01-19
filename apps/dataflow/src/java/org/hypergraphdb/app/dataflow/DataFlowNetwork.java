@@ -29,8 +29,48 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.hypergraphdb.util.Pair;
 
+/**
+ * <p>
+ * Represents and manages the computation of a complete dataflow network. A dataflow network
+ * can be thought of as a complete, parallel program to be executed on a set of concurrent threads.
+ * An instance of this class manages all {@link Channel}s and {@link Processor}s comprising the 
+ * network.    
+ * </p>
+ * 
+ * <p>
+ * Each network has a global, arbitrary context object for all processing nodes to access
+ * whatever global information the application needs to manage. The context has to be set
+ * before the network is started (e.g. at construction time) and it is passed to each 
+ * process at execution time.
+ * </p>
+ * 
+ * <p>
+ * To create a network, first create an instance of this class. Then add all communication 
+ * {@link Channel}s, finally add all {@link Processor}s. Note that all channels must have 
+ * unique names with the network. 
+ * </p>
+ * 
+ * <p>
+ * To execute it, just call the {@link DataFlowNetwork.start} method. The start method returns
+ * a <code>Future</code> object that can be polled or waited upon until the computation terminates.
+ * Once the computation terminates, gracefully or due to a cancellation, you can start the network
+ * again.
+ * </p>
+ * 
+ * <p>
+ * The network maintains a thread pool internally so by default, the Java application won't exit
+ * normally until the network is <code>shutdown</code> (which shuts down the pool). You can force
+ * the threads to be created as daemons with the <code>daemon</code>. 
+ * </p>
+ * 
+ * @author Borislav Iordanov
+ *
+ * @param <ContextType> The type of the global, network context. It must be the same type
+ * as all {@link Processor}s participating in this network. 
+ */
 public class DataFlowNetwork<ContextType>
 {
+    boolean daemon;
     Map<Object, Channel<?>> channels = new HashMap<Object, Channel<?>>();;
     Map<Processor<ContextType>, Pair<Set<String>, Set<String>>>
         nodes = new HashMap<Processor<ContextType>, Pair<Set<String>, Set<String>>>();
@@ -68,7 +108,7 @@ public class DataFlowNetwork<ContextType>
                                                 {
                                                     Thread t = new Thread(r);
                                                     t.setContextClassLoader(loader);
-                                                    //t.setDaemon(true);
+                                                    t.setDaemon(daemon);
                                                     return t;
                                                 }
                                             });
@@ -112,14 +152,52 @@ public class DataFlowNetwork<ContextType>
         startNode(processor, ports);
     }
     
+    /**
+     * <p>
+     * Construct a network with a <code>null</code> global context.
+     * </p>
+     */
     public DataFlowNetwork()
     { 
     }
 
+    /**
+     * <p>
+     * Construct a network with the specified global context that will be passed as the 
+     * first argument to all its {@link Processor}s.
+     * </p>
+     * @param ctx The global context.
+     */
     public DataFlowNetwork(ContextType ctx)
     {
         this();
         this.context = ctx;
+    }
+
+    /**
+     * <p>
+     * Construct a network with the specified global context that will be passed as the 
+     * first argument to all its {@link Processor}s, and be explicitly setting whether
+     * threads should be created as daemons.
+     * </p>
+     * @param ctx The global context.
+     * @param daemon If <code>true</code>, threads in the thread pool will be created as daemons, so
+     * the JVM won't wait for them to finish before exiting.
+     */
+    public DataFlowNetwork(ContextType ctx, boolean deamon)
+    {
+        this(ctx);
+        this.daemon = deamon;
+    }
+    
+    public boolean isDaemon()
+    {
+        return daemon;
+    }
+
+    public void setDaemon(boolean deamon)
+    {
+        this.daemon = deamon;
     }
 
     /**

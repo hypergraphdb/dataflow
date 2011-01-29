@@ -10,7 +10,9 @@
  ******************************************************************************/
 package org.hypergraphdb.app.dataflow;
 
+import java.io.StringWriter;
 import java.util.List;
+import java.util.Map;
 
 import java.util.UUID;
 
@@ -21,6 +23,7 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.map.deser.BeanDeserializerFactory;
 import org.codehaus.jackson.map.deser.StdDeserializerProvider;
 import org.codehaus.jackson.map.ser.BeanSerializerFactory;
+import org.hypergraphdb.HGException;
 import org.hypergraphdb.HGHandle;
 import org.hypergraphdb.peer.HyperGraphPeer;
 import org.hypergraphdb.peer.Message;
@@ -31,6 +34,7 @@ import org.hypergraphdb.peer.workflow.OnMessage;
 import org.hypergraphdb.peer.workflow.WorkflowState;
 import org.hypergraphdb.peer.workflow.WorkflowStateConstant;
 import org.hypergraphdb.util.HGUtils;
+import org.hypergraphdb.util.Mapping;
 
 /**
  * <p>
@@ -54,7 +58,7 @@ public class NetworkPeerActivity extends FSMActivity
 
     private ObjectMapper jsonObjectMapper = null;
     
-    ObjectMapper getObjectMapper()
+    private ObjectMapper getObjectMapper()
     {
         if (jsonObjectMapper == null)
         {            
@@ -68,14 +72,61 @@ public class NetworkPeerActivity extends FSMActivity
     }
     
     @SuppressWarnings("unchecked")
-    private Channel<Object> getChannel(Object channelDesc)
+    Map<String, Object> toJson(Object x)
+    {
+        Mapping<Object, String> ser = 
+            (Mapping<Object, String>)this.getThisPeer().getObjectContext().get("dataflow-json-serializer");
+        String serialized = null;
+        if (ser != null)
+            serialized = ser.eval(x);
+        else
+        {
+            StringWriter jsonWriter = new StringWriter();
+            try
+            {
+                getObjectMapper().writeValue(jsonWriter, x);
+            }
+            catch (Throwable e)
+            {
+                throw new RuntimeException(e);
+            }
+            serialized = jsonWriter.toString();
+        }
+        return struct("classname", x.getClass().getName(),
+               "json", serialized);
+    }
+    
+    @SuppressWarnings("unchecked")
+    <T> T fromJson(Map<String, Object> structure)
+    {
+        Mapping<Map<String, Object>, T> ser = 
+            (Mapping<Map<String, Object>, T>)this.getThisPeer().getObjectContext().get("dataflow-json-deserializer");
+        if (ser != null)
+            return ser.eval(structure);
+        else
+        {
+            Class<?> clazz;
+            try
+            {
+                clazz = HGUtils.loadClass(getThisPeer().getGraph(),
+                                                   (String)getPart(structure, "classname"));
+                return (T)getObjectMapper().readValue((String)getPart(structure, "classname"), clazz);                
+            }
+            catch (Exception e)
+            {
+                throw new HGException(e);
+            }               
+        }
+    }
+    
+    private Channel<?> getChannel(Object channelDesc)
     {
         if (channelDesc instanceof List)
         {
             HGHandle jobId = getPart(channelDesc, 0);            
             String channelId = getPart(channelDesc, 1);
-            Channel logicalChannel = network.getChannel(channelId);
-            JobDataFlow jobNetwork = (JobDataFlow)network;
+            Channel<?> logicalChannel = network.getChannel(channelId);
+            JobDataFlow<?> jobNetwork = (JobDataFlow<?>)network;
             return jobNetwork.getChannelManager().getJobChannel(jobNetwork, 
                                                                 logicalChannel, 
                                                                 (Job)getThisPeer().getGraph().get(jobId));
@@ -153,10 +204,8 @@ public class NetworkPeerActivity extends FSMActivity
         if (channelId != null)
         {
             DistributedChannel<Object> ch = (DistributedChannel<Object>)getChannel(channelId);
-            Class<?> clazz = HGUtils.loadClass(getThisPeer().getGraph(),
-                                               (String)getPart(msg, CONTENT, "datum", "classname"));
-            String jsonRepresentation = getPart(msg, CONTENT, "datum", "json");
-            ch.putLocal(getObjectMapper().readValue(jsonRepresentation, clazz));
+            Map<String, Object> rep = getPart(msg, CONTENT, "datum"); 
+            ch.putLocal(fromJson(rep));
             reply(msg, Performative.Confirm, null);
         }
         return null;

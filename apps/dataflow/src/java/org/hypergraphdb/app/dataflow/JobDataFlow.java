@@ -91,7 +91,6 @@ public class JobDataFlow<ContextType> extends DataFlowNetwork<ContextType>
         return result;
     }
 
-    @SuppressWarnings("unchecked")
     public static <CT>
         JobDataFlow<CT> clone(JobDataFlow<CT> network)
     {

@@ -11,12 +11,12 @@
 package org.hypergraphdb.app.dataflow;
 
 import static org.hypergraphdb.peer.Messages.CONTENT;
+
 import static org.hypergraphdb.peer.Messages.createMessage;
 import static org.hypergraphdb.peer.Structs.combine;
 import static org.hypergraphdb.peer.Structs.list;
 import static org.hypergraphdb.peer.Structs.struct;
 
-import java.io.StringWriter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -63,7 +63,7 @@ public class ChannelPeer<ContextType> extends DefaultChannelManager
         this.network = network;  
     }    
     
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     public void initNetworking()
     {        
         for (Channel<?> ch : network.getChannels())
@@ -114,19 +114,9 @@ public class ChannelPeer<ContextType> extends DefaultChannelManager
                     Message msg = createMessage(Performative.InformRef, activity);
                     try
                     {
-                        StringWriter jsonWriter = new StringWriter();
-                        try
-                        {
-                            activity.getObjectMapper().writeValue(jsonWriter, x);
-                        }
-                        catch (Throwable e)
-                        {
-                            throw new RuntimeException(e);
-                        }                    
                         if (!thisPeer.getPeerInterface().send(thisPeer.getNetworkTarget(target), 
                             combine(msg, struct(CONTENT, 
-                                                struct("datum", struct("classname", x.getClass().getName(),
-                                                                       "json", jsonWriter.toString()),
+                                                struct("datum", activity.toJson(x),
                                                        "channel", list(jobId, getId()))))).get())
                             throw new PeerFailedException(target, 
                                                           " while sending data on channel " + getId());
@@ -174,19 +164,9 @@ public class ChannelPeer<ContextType> extends DefaultChannelManager
                     Message msg = createMessage(Performative.InformRef, activity);
                     try
                     {
-                        StringWriter jsonWriter = new StringWriter();
-                        try
-                        {
-                            activity.getObjectMapper().writeValue(jsonWriter, x);
-                        }
-                        catch (Throwable e)
-                        {
-                            throw new RuntimeException(e);
-                        }                    
                         if (!thisPeer.getPeerInterface().send(thisPeer.getNetworkTarget(target), 
                             combine(msg, struct(CONTENT, 
-                                                struct("datum", struct("classname", x.getClass().getName(),
-                                                                       "json", jsonWriter.toString()),
+                                                struct("datum", activity.toJson(x),
                                                        "channel", getId())))).get())
                             throw new PeerFailedException(target, 
                                                           " while sending data on channel " + getId());

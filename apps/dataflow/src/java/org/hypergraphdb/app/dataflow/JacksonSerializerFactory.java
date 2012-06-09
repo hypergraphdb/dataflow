@@ -43,7 +43,7 @@ public class JacksonSerializerFactory extends SerializerFactory
     	return this.javaSerializedClasses;
     }
     
-    @Override
+    
     public <T> JsonSerializer<T> createSerializer(Class<T> type,
                                                   SerializationConfig config)
     {
@@ -62,7 +62,7 @@ public class JacksonSerializerFactory extends SerializerFactory
         
         HGDBJsonSerializer(Pair<StructsMapper, String> p) { this.p = p; }
 
-        @Override
+        
         public void serialize(Object value, JsonGenerator jgen,
                               SerializerProvider provider) throws IOException,
                                                                   JsonProcessingException
@@ -74,7 +74,7 @@ public class JacksonSerializerFactory extends SerializerFactory
     
     public static class JavaPlatformSerializer<T> extends JsonSerializer<T>
     {
-        @Override
+        
         public void serialize(Object value, JsonGenerator jgen,
                               SerializerProvider provider) throws IOException,
                                                                   JsonProcessingException

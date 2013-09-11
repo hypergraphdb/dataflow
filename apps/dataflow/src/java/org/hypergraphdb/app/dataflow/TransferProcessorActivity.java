@@ -10,13 +10,17 @@
  ******************************************************************************/
 package org.hypergraphdb.app.dataflow;
 
+import static org.hypergraphdb.peer.Messages.CONTENT;
+import static org.hypergraphdb.peer.Messages.getReply;
+import static org.hypergraphdb.peer.Messages.getSender;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 
-import static org.hypergraphdb.peer.Messages.*;
-import static org.hypergraphdb.peer.Structs.*;
+import mjson.Json;
+
 import org.hypergraphdb.HGHandle;
 import org.hypergraphdb.HGPlainLink;
 import org.hypergraphdb.HGQuery.hg;
@@ -24,9 +28,9 @@ import org.hypergraphdb.algorithms.DefaultALGenerator;
 import org.hypergraphdb.algorithms.HGBreadthFirstTraversal;
 import org.hypergraphdb.peer.HGPeerIdentity;
 import org.hypergraphdb.peer.HyperGraphPeer;
-import org.hypergraphdb.peer.Message;
-import org.hypergraphdb.peer.SubgraphManager;
+import org.hypergraphdb.peer.Messages;
 import org.hypergraphdb.peer.Performative;
+import org.hypergraphdb.peer.SubgraphManager;
 import org.hypergraphdb.peer.workflow.FSMActivity;
 import org.hypergraphdb.peer.workflow.FromState;
 import org.hypergraphdb.peer.workflow.OnMessage;
@@ -103,8 +107,8 @@ public class TransferProcessorActivity extends FSMActivity
     @Override
     public void initiate()
     {
-        Message msg = createMessage(Performative.Propose, this);
-        combine(msg, struct(CONTENT, struct("processor", processor, "network", network)));
+        Json msg = createMessage(Performative.Propose, this);
+        msg.set(CONTENT, Json.object("processor", processor, "network", network));
         post(target, msg);
     }
     
@@ -114,10 +118,10 @@ public class TransferProcessorActivity extends FSMActivity
      */
     @FromState("Started")
     @OnMessage(performative="Propose")
-    public WorkflowState onPropose(Message msg)
+    public WorkflowState onPropose(Json msg)
     {
-        processor = getPart(msg, CONTENT, "processor");
-        network = getPart(msg, CONTENT, "network");
+        processor = Messages.fromJson(msg.at(CONTENT).at("processor"));
+        network = Messages.fromJson(msg.at(CONTENT).at("network"));
         if (processor == null || network == null)
         {
             post(getSender(msg), getReply(msg, Performative.NotUnderstood, "processor or network null"));
@@ -156,26 +160,26 @@ public class TransferProcessorActivity extends FSMActivity
      */
     @FromState("Started")
     @OnMessage(performative="AcceptProposal")
-    public WorkflowState onAcceptProposal(Message msg)
+    public WorkflowState onAcceptProposal(Json msg)
     {
-        Message reply = getReply(msg, Performative.InformRef);
-        combine(reply, struct(CONTENT, 
-                              SubgraphManager.getTransferAtomRepresentation(getThisPeer().getGraph(), 
-                                                                            processor)));
+        Json reply = getReply(msg, Performative.InformRef);
+        reply.set(CONTENT, 
+                  SubgraphManager.getTransferAtomRepresentation(getThisPeer().getGraph(), 
+                                                                            processor));
         post(getSender(msg), reply);
         return null;
     }
     
     @FromState("Started")
     @OnMessage(performative="InformRef")
-    public WorkflowState onProcessorInformRef(final Message msg) throws Exception
+    public WorkflowState onProcessorInformRef(final Json msg) throws Exception
     {
-        final Object atom = getPart(msg, CONTENT);
-        if (atom == null)
+        if (!msg.has(CONTENT))
         {
             post(getSender(msg), getReply(msg, Performative.Failure, "missing processor atom"));
             return WorkflowState.Failed;
-        }        
+        }
+        final Json atom = msg.at(CONTENT);        
         return getThisPeer().getGraph().getTransactionManager().transact(new Callable<WorkflowState>() {
             public WorkflowState call() throws Exception
             {
@@ -196,7 +200,7 @@ public class TransferProcessorActivity extends FSMActivity
                 post(getSender(msg), 
                      getReply(msg, 
                               Performative.QueryRef, 
-                              list("channels-of", processor)));                
+                              Json.array("channels-of", processor)));                
                 return ChannelTransfer;
             }
         });
@@ -205,11 +209,11 @@ public class TransferProcessorActivity extends FSMActivity
     @FromState("Started")
     @OnMessage(performative="QueryRef")
     @PossibleOutcome("ChannelTransfer")
-    public WorkflowState onQueryRef(Message msg) throws Exception
+    public WorkflowState onQueryRef(Json msg) throws Exception
     {
-        String kind = getPart(msg, CONTENT, 0);
+        String kind = msg.at(CONTENT).at(0).asString();
         assert kind != null : new NullPointerException("missing query-ref kind");
-        HGHandle proc = getPart(msg, CONTENT, 1);
+        HGHandle proc = Messages.fromJson(msg.at(CONTENT).at(1));
         assert proc !=  null : new NullPointerException("missing processor handle");
         if ("channels-of".equals(kind))
         {
@@ -237,10 +241,10 @@ public class TransferProcessorActivity extends FSMActivity
     @FromState("ChannelTransfer")
     @OnMessage(performative="InformRef")
     @PossibleOutcome("SiblingTransfer")
-    public WorkflowState onChannelsInformRef(Message msg) throws Exception
+    public WorkflowState onChannelsInformRef(Json msg) throws Exception
     {
-        List<Object> channels = getPart(msg, CONTENT);
-        for (Object atom : channels)
+        Json channels = msg.at(CONTENT);
+        for (Json atom : channels.asJsonList())
         {
             // Do we really want to overwrite possibly already stored channels here?
             HGHandle chHandle = SubgraphManager.writeTransferedGraph(
@@ -261,17 +265,16 @@ public class TransferProcessorActivity extends FSMActivity
     @FromState({"ChannelTransfer", "SiblingTransfer"})
     @OnMessage(performative="QueryRef")
     @PossibleOutcome("SiblingTransfer")
-    public WorkflowState onSiblingQueryRef(Message msg) throws Exception
+    public WorkflowState onSiblingQueryRef(Json msg) throws Exception
     {
-        HGHandle sibling = getPart(msg, CONTENT);
+        HGHandle sibling = Messages.fromJson(msg.at(CONTENT));
         // Where is this sibling running?
         HGHandle owningPeer = hg.findOne(getThisPeer().getGraph(), 
                                          hg.apply(hg.targetAt(getThisPeer().getGraph(), 2),
                                                   hg.orderedLink(network, sibling, hg.anyHandle()))); 
         reply(msg, 
               Performative.InformRef, 
-              list(SubgraphManager.getTransferAtomRepresentation(getThisPeer().getGraph(), 
-                                                                 sibling),
+              Json.array(SubgraphManager.getTransferAtomRepresentation(getThisPeer().getGraph(), sibling),
                    owningPeer));
         return SiblingTransfer;
     }
@@ -279,15 +282,15 @@ public class TransferProcessorActivity extends FSMActivity
     @FromState("SiblingTransfer")
     @OnMessage(performative="InformRef")
     @PossibleOutcome({"SiblingTransfer", "Completed"})
-    public WorkflowState onSiblingReceive(final Message msg) throws Exception
+    public WorkflowState onSiblingReceive(final Json msg) throws Exception
     {
         if (remainingSiblings <= 0)
         {
             reply(msg, Performative.Failure, "wrong sibling count");
             return WorkflowState.Failed;
         }
-        final Object atom = getPart(msg, CONTENT, 0);
-        final HGHandle owningPeer = getPart(msg, CONTENT, 1);
+        final Json atom = msg.at(CONTENT).at(0);
+        final HGHandle owningPeer = Messages.fromJson(msg.at(CONTENT).at(1));
         return getThisPeer().getGraph().getTransactionManager().transact(new Callable<WorkflowState>() {
             public WorkflowState call() throws Exception
             {
@@ -306,11 +309,11 @@ public class TransferProcessorActivity extends FSMActivity
                 {
                     HGBreadthFirstTraversal traversal = new HGBreadthFirstTraversal(processor, 
                             new DefaultALGenerator(getThisPeer().getGraph(), hg.type(ChannelLink.class), null), 1);
-                    Message informLocation = createMessage(Performative.Inform, TransferProcessorActivity.this);
-                    combine(informLocation, struct("token", "processor-location", 
-                                                   "network", network,
-                                                   "processor", processor,
-                                                   "location", getThisPeer().getIdentity().getId()));
+                    Json informLocation = createMessage(Performative.Inform, TransferProcessorActivity.this);
+                    informLocation.set("token", "processor-location")
+                                  .set("network", network)
+                                  .set("processor", processor)
+                                  .set("location", getThisPeer().getIdentity().getId());
                     while (traversal.hasNext())
                     {
                         Pair<HGHandle, HGHandle> current = traversal.next();
@@ -324,7 +327,7 @@ public class TransferProcessorActivity extends FSMActivity
                         else
                             send(peerLocation, informLocation); // blocking send - will fail the whole activity if unsuccessful
                     }
-                    reply(msg, Performative.Inform, struct("token", "done"));
+                    reply(msg, Performative.Inform, Json.object("token", "done"));
                     return WorkflowState.Completed;
                 }
                 else
@@ -335,16 +338,17 @@ public class TransferProcessorActivity extends FSMActivity
     
     @FromState({"SiblingTransfer", "ChannelTransfer", "Started"})
     @OnMessage(performative="Inform")
-    public WorkflowState onInformGeneric(Message msg)
+    public WorkflowState onInformGeneric(Json msg)
     {
-        String token = getPart(msg, CONTENT, "token");
+        String token = msg.at(CONTENT).at("token").asString()
+                ;
         if ("done".equals(token))
             return WorkflowState.Completed;
         else if ("processor-location".equals(token))
         {
-            HGHandle net = getPart(msg, CONTENT, "network");
-            HGHandle proc = getPart(msg, CONTENT, "processor");
-            HGHandle peer = getPart(msg, CONTENT, "location");
+            HGHandle net = Messages.fromJson(msg.at(CONTENT).at("network"));
+            HGHandle proc = Messages.fromJson(msg.at(CONTENT).at("processor"));
+            HGHandle peer = Messages.fromJson(msg.at(CONTENT).at("location")); 
             DistUtils.setOwningPeer(getThisPeer().getGraph(), net, proc, peer);
             
             // If this is just an informational blurb...

@@ -13,20 +13,18 @@ package org.hypergraphdb.app.dataflow;
 import static org.hypergraphdb.peer.Messages.CONTENT;
 
 import static org.hypergraphdb.peer.Messages.createMessage;
-import static org.hypergraphdb.peer.Structs.combine;
-import static org.hypergraphdb.peer.Structs.list;
-import static org.hypergraphdb.peer.Structs.struct;
-
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
+
+import mjson.Json;
+
 import org.hypergraphdb.HGHandle;
 import org.hypergraphdb.peer.HGPeerIdentity;
 import org.hypergraphdb.peer.HyperGraphPeer;
-import org.hypergraphdb.peer.Message;
 import org.hypergraphdb.peer.Performative;
 import org.hypergraphdb.peer.workflow.WorkflowState;
 
@@ -111,13 +109,12 @@ public class ChannelPeer<ContextType> extends DefaultChannelManager
                     HGHandle jobId = getJob().getHandle();
                     if (jobId == null)
                         throw new RuntimeException("Attempt to put data into a channel with no associated peer task id.");
-                    Message msg = createMessage(Performative.InformRef, activity);
+                    Json msg = createMessage(Performative.InformRef, activity);
                     try
                     {
                         if (!thisPeer.getPeerInterface().send(thisPeer.getNetworkTarget(target), 
-                            combine(msg, struct(CONTENT, 
-                                                struct("datum", activity.toJson(x),
-                                                       "channel", list(jobId, getId()))))).get())
+                            msg.set(CONTENT, Json.object("datum", activity.toJson(x),
+                                                         "channel", Json.array(jobId, getId())))).get())
                             throw new PeerFailedException(target, 
                                                           " while sending data on channel " + getId());
                     }
@@ -161,13 +158,12 @@ public class ChannelPeer<ContextType> extends DefaultChannelManager
                 putLocal(x);
                 for (HGPeerIdentity target : getChannelPeers(getId()))
                 {
-                    Message msg = createMessage(Performative.InformRef, activity);
+                    Json msg = createMessage(Performative.InformRef, activity);
                     try
                     {
                         if (!thisPeer.getPeerInterface().send(thisPeer.getNetworkTarget(target), 
-                            combine(msg, struct(CONTENT, 
-                                                struct("datum", activity.toJson(x),
-                                                       "channel", getId())))).get())
+                            msg.set(CONTENT, Json.object("datum", activity.toJson(x),
+                                                          "channel", getId()))).get())
                             throw new PeerFailedException(target, 
                                                           " while sending data on channel " + getId());
                     }

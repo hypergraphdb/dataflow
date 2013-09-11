@@ -12,16 +12,16 @@ package org.hypergraphdb.app.dataflow;
 
 import java.util.UUID;
 
+import mjson.Json;
+
 import org.hypergraphdb.HGHandle;
 import org.hypergraphdb.peer.HGPeerIdentity;
 import org.hypergraphdb.peer.HyperGraphPeer;
-import org.hypergraphdb.peer.Message;
+import org.hypergraphdb.peer.Messages;
 import org.hypergraphdb.peer.SubgraphManager;
 import org.hypergraphdb.peer.Performative;
 import org.hypergraphdb.peer.workflow.Activity;
 import org.hypergraphdb.peer.workflow.WorkflowState;
-
-import static org.hypergraphdb.peer.Structs.*;
 import static org.hypergraphdb.peer.Messages.*;
 import static org.hypergraphdb.peer.Performative.*;
 
@@ -60,19 +60,19 @@ public class JoinNetworkActivity extends Activity
     @Override
     public void initiate()
     {
-        Message msg = createMessage(Performative.Propose, this);
-        combine(msg, struct(CONTENT, networkHandle));
+        Json msg = createMessage(Performative.Propose, this);
+        msg.set(CONTENT, networkHandle);
         post(target, msg);
     }
     
     @Override
-    public void handleMessage(Message message)
+    public void handleMessage(Json message)
     {
-        Message reply = null;
-        Performative perf = message.getPerformative();
+        Json reply = null;
+        Performative perf = Performative.toConstant(message.at("performative").asString());
         if (perf == Propose)
         {
-            HGHandle h = getPart(message, CONTENT);                
+            HGHandle h = Messages.fromJson(message.at(CONTENT));                
             if (getThisPeer().getGraph().get(h) != null)
             {
                 reply = getReply(message, Performative.AcceptProposal);
@@ -88,16 +88,15 @@ public class JoinNetworkActivity extends Activity
         else if (perf == QueryRef)
         {
             reply = getReply(message, Performative.InformRef);
-            combine(reply, 
-                    struct(CONTENT, 
-                           SubgraphManager.getTransferAtomRepresentation(getThisPeer().getGraph(), 
-                                                                         networkHandle)));
+            reply.set(CONTENT, 
+                      SubgraphManager.getTransferAtomRepresentation(getThisPeer().getGraph(), 
+                                                                    networkHandle));
         }
         else if (perf == InformRef)
         {
             try
             {
-                SubgraphManager.writeTransferedGraph(getPart(message, CONTENT), 
+                SubgraphManager.writeTransferedGraph(message.at(CONTENT), 
                                                     getThisPeer().getGraph());
                 reply = getReply(message, Performative.AcceptProposal);
                 getState().assign(WorkflowState.Completed);

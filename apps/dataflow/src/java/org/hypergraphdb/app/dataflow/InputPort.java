@@ -96,7 +96,10 @@ public class InputPort<V> extends Port<V> implements Iterable<V>
 		synchronized (this)
 		{
 			if (!isOpen())
+			{
+//			    System.out.println("port not open...");
 				return false;
+			}
 		}
 		try
 		{
@@ -108,6 +111,7 @@ public class InputPort<V> extends Port<V> implements Iterable<V>
 			queue.clear();
 			return false;
 		}
+//		System.out.println("port " + this + " size = " + queue.size());
 		return true;
 	}
 

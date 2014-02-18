@@ -444,8 +444,7 @@ public class DataFlowNetwork<ContextType>
 
     public void shutdown()
     {
-    	if (threadPool != null)
-    		threadPool.shutdown();
+        kill();
     }
 
     /**
@@ -460,13 +459,15 @@ public class DataFlowNetwork<ContextType>
     public void kill()
     {    	
     	if (threadPool != null)
+    	{
     		threadPool.shutdownNow();
+    		completed();
+    	}
     }
 
     protected void finalize()
     {
-    	if (threadPool != null)    	
-    		threadPool.shutdownNow();
+        kill();
     }
 
     /**

@@ -1,0 +1,24 @@
+Manifest-Version: 1.0
+Export-Package: org.hypergraphdb.app.dataflow;uses:="org.hypergraphdb.
+ peer,org.apache.commons.logging,mjson,org.hypergraphdb.query,org.hype
+ rgraphdb.peer.workflow,org.hypergraphdb.atom,org.hypergraphdb.util,or
+ g.hypergraphdb.peer.serializer,org.hypergraphdb.app.dataflow.monitor,
+ org.hypergraphdb.algorithms,org.hypergraphdb.annotation,org.hypergrap
+ hdb.transaction,org.hypergraphdb,org.hypergraphdb.handle",org.hypergr
+ aphdb.app.dataflow.monitor;uses:="org.hypergraphdb.app.dataflow"
+Built-By: borislav
+Build-Jdk: 1.6.0_27
+Bundle-Version: 1.3.0.SNAPSHOT
+Tool: Bnd-0.0.238
+Bundle-Name: HyperGraphDB Dataflow Framework
+Bnd-LastModified: 1404704377437
+Created-By: Apache Maven Bundle Plugin
+Bundle-ManifestVersion: 2
+Bundle-SymbolicName: org.hypergraphdb-hgdbdataflow;singleton:=true
+Import-Package: mjson,org.apache.commons.logging,org.hypergraphdb,org.
+ hypergraphdb.algorithms,org.hypergraphdb.annotation,org.hypergraphdb.
+ app.dataflow,org.hypergraphdb.app.dataflow.monitor,org.hypergraphdb.a
+ tom,org.hypergraphdb.handle,org.hypergraphdb.peer,org.hypergraphdb.pe
+ er.serializer,org.hypergraphdb.peer.workflow,org.hypergraphdb.query,o
+ rg.hypergraphdb.transaction,org.hypergraphdb.util
+
